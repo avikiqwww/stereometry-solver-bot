@@ -216,3 +216,23 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# --- Проект ---
+# Собранные данные: не публикуем (осторожность из-за copyright источников,
+# например ФИПИ — "Все права защищены"). Файлы воспроизводятся парсером.
+data/raw/
+data/interim/
+data/processed/
+
+# Временный объединённый файл сертификатов (certifi + недостающий intermediate),
+# собирается заново при каждом запуске parser/fipi_parser.py
+parser/certs/_ca_bundle.pem
+
+# Модели/веса — тяжёлые, в git им не место
+models/
+checkpoints/
+*.gguf
+*.safetensors
+*.pt
+*.pth
+
