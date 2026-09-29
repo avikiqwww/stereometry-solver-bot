@@ -9,4 +9,7 @@ dependencies = [
     "beautifulsoup4",
     "lxml",
     "certifi",
+    "pandas",
+    "huggingface-hub",
+    "argostranslate",
 ]

@@ -1,13 +1,19 @@
 """
-Парсер открытого банка заданий ФИПИ (раздел «Математика. Профильный уровень»).
+Парсер открытого банка заданий ФИПИ: ЕГЭ («Математика. Профильный уровень»)
+и ОГЭ («Математика»).
 
-Источник: https://ege.fipi.ru/bank/
+Источники: https://ege.fipi.ru/bank/ и https://oge.fipi.ru/bank/
 Легальность проверена вручную: robots.txt раздел не запрещает, официальный
 государственный банк заданий для подготовки к экзамену. В отличие от
 «Решу ЕГЭ» (sdamgia.ru), где парсинг прямо запрещён лицензией, здесь такого
 запрета не найдено. Осторожность: контент защищён copyright («Все права
 защищены»), поэтому сырые данные (data/raw/) не публикуются в репозитории
 (см. .gitignore) — используются только как обучающие данные внутри проекта.
+
+Важно про ОГЭ: в отличие от ЕГЭ, в программе 9 класса стереометрии нет вообще —
+весь раздел «Геометрия» там это планиметрия (треугольники, окружности,
+многоугольники). Поэтому из ОГЭ берём только hard negatives: geometry
+(планиметрия в другом, «9-классном» стиле формулировок) и алгебру.
 
 Технические детали, которые пришлось выяснить эмпирически (сайт не документирует API):
 - Раздел работает без JS-рендеринга контента: задания отдаются готовым HTML
@@ -42,18 +48,28 @@ import certifi
 import requests
 from bs4 import BeautifulSoup
 
-BASE = "https://ege.fipi.ru/bank"
-PROJ_MATH_PROFILE = "AC437B34557F88EA4115D2F374B0A07B"  # "Математика. Профильный уровень"
 HEADERS = {"User-Agent": "Mozilla/5.0 (educational dataset research)"}
 
 PARSER_DIR = Path(__file__).resolve().parent
 INTERMEDIATE_CERT = PARSER_DIR / "certs" / "globalsign_gcc_r3_dv_tls_ca_2020.pem"
 
-# Коды КЭС (кодификатора элементов содержания) для раздела 7 «Геометрия».
-# 7.1 — планиметрия (2D, идёт как hard negative), 7.2-7.4 — стереометрия (3D, позитив).
-# 7.5 «Координаты и векторы» намеренно не берём — там вперемешку 2D и 3D задачи.
-STEREOMETRY_CODES = ("7.2", "7.3", "7.4")
-PLANIMETRY_CODES = ("7.1",)
+# Каждый банк — свой поддомен и свой proj (id предмета, зашит статично в
+# HTML главной страницы bank/index.php, не меняется от сессии к сессии).
+EGE_PROFILE = {"base": "https://ege.fipi.ru/bank", "proj": "AC437B34557F88EA4115D2F374B0A07B"}
+OGE_MATH = {"base": "https://oge.fipi.ru/bank", "proj": "DE0E276E497AB3784C3FC4CC20248DC0"}
+
+# Коды КЭС (кодификатора элементов содержания).
+# ЕГЭ, раздел 7 «Геометрия»: 7.1 — планиметрия (hard negative),
+# 7.2-7.4 — стереометрия (позитив). 7.5 «Координаты и векторы» не берём —
+# там вперемешку 2D и 3D задачи.
+EGE_STEREOMETRY_CODES = ("7.2", "7.3", "7.4")
+EGE_PLANIMETRY_CODES = ("7.1",)
+
+# ОГЭ: стереометрии в программе 9 класса нет — весь раздел 7 «Геометрия»
+# это планиметрия, в другом стиле формулировок, чем в ЕГЭ (доп. hard negative).
+# Разделы 2 и 3 — алгебра (ещё один hard negative).
+OGE_GEOMETRY_CODES = ("7.1", "7.2", "7.3", "7.4", "7.5", "7.6")
+OGE_ALGEBRA_CODES = ("2.", "3.")
 
 
 def _build_ca_bundle() -> str:
@@ -68,18 +84,33 @@ def _build_ca_bundle() -> str:
     return str(combined_path)
 
 
-def fetch_questions_page(session: requests.Session, ca_bundle: str, proj: str, page: int) -> str:
-    """Запрашивает одну страницу заданий и возвращает раскодированный HTML."""
-    resp = session.post(
-        f"{BASE}/questions.php",
-        data={"proj": proj, "page": page},
-        headers=HEADERS,
-        timeout=15,
-        verify=ca_bundle,
-    )
-    resp.raise_for_status()
-    resp.encoding = "windows-1251"  # сайт отдаёт именно в этой кодировке, не в utf-8
-    return resp.text
+def fetch_questions_page(
+    session: requests.Session, ca_bundle: str, base: str, proj: str, page: int,
+    retries: int = 3, backoff: float = 5.0,
+) -> str:
+    """Запрашивает одну страницу заданий и возвращает раскодированный HTML.
+
+    Сайт изредка не успевает ответить за отведённое время (обычный сетевой
+    шум на большом количестве запросов подряд) — это не повод терять всё,
+    что уже собрано, поэтому несколько раз пробуем повторно с паузой."""
+    last_error: Exception | None = None
+    for attempt in range(1, retries + 1):
+        try:
+            resp = session.post(
+                f"{base}/questions.php",
+                data={"proj": proj, "page": page},
+                headers=HEADERS,
+                timeout=20,
+                verify=ca_bundle,
+            )
+            resp.raise_for_status()
+            resp.encoding = "windows-1251"  # сайт отдаёт именно в этой кодировке, не в utf-8
+            return resp.text
+        except (requests.exceptions.RequestException,) as exc:
+            last_error = exc
+            print(f"  страница {page}: попытка {attempt}/{retries} не удалась ({exc.__class__.__name__}), жду {backoff}с")
+            time.sleep(backoff)
+    raise RuntimeError(f"Страница {page}: не удалось получить ответ за {retries} попыток") from last_error
 
 
 def parse_questions(html: str) -> list[dict]:
@@ -109,15 +140,21 @@ def parse_questions(html: str) -> list[dict]:
     return items
 
 
-def collect(max_pages: int, delay: float = 1.0) -> list[dict]:
-    """Собирает задания со всех страниц раздела «Математика. Профильный уровень»."""
+def collect(bank: dict, max_pages: int, delay: float = 1.0) -> list[dict]:
+    """Собирает задания со всех страниц указанного банка (ЕГЭ или ОГЭ)."""
     ca_bundle = _build_ca_bundle()
     session = requests.Session()
     all_items: list[dict] = []
     seen_numbers: set[str] = set()
 
     for page in range(1, max_pages + 1):
-        html = fetch_questions_page(session, ca_bundle, PROJ_MATH_PROFILE, page)
+        try:
+            html = fetch_questions_page(session, ca_bundle, bank["base"], bank["proj"], page)
+        except RuntimeError as exc:
+            # Сайт так и не ответил за все попытки — не теряем то, что уже
+            # собрали, просто останавливаемся раньше времени.
+            print(f"{exc}. Останавливаюсь, сохраняю уже собранное ({len(all_items)} заданий).")
+            break
         items = parse_questions(html)
 
         new_items = [it for it in items if it["number"] not in seen_numbers]
@@ -144,16 +181,37 @@ def save_jsonl(items: list[dict], path: Path) -> None:
             f.write(json.dumps(it, ensure_ascii=False) + "\n")
 
 
-if __name__ == "__main__":
-    all_math = collect(max_pages=115)  # весь раздел «Математика. Профильный уровень» (~1148 заданий)
-
-    stereometry = [it for it in all_math if _matches(it, STEREOMETRY_CODES)]
-    planimetry = [it for it in all_math if _matches(it, PLANIMETRY_CODES)]
+def collect_ege(max_pages: int = 115) -> None:
+    """ЕГЭ, «Математика. Профильный уровень» (~1148 заданий, ~115 страниц)."""
+    items = collect(EGE_PROFILE, max_pages=max_pages)
+    stereometry = [it for it in items if _matches(it, EGE_STEREOMETRY_CODES)]
+    planimetry = [it for it in items if _matches(it, EGE_PLANIMETRY_CODES)]
 
     out_dir = Path(__file__).resolve().parent.parent / "data" / "raw"
-    save_jsonl(stereometry, out_dir / "fipi_stereometry.jsonl")
-    save_jsonl(planimetry, out_dir / "fipi_planimetry.jsonl")
+    save_jsonl(stereometry, out_dir / "fipi_ege_stereometry.jsonl")
+    save_jsonl(planimetry, out_dir / "fipi_ege_planimetry.jsonl")
 
-    print(f"Всего собрано: {len(all_math)}")
-    print(f"Стереометрия (7.2-7.4): {len(stereometry)}")
-    print(f"Планиметрия (7.1): {len(planimetry)}")
+    print(f"ЕГЭ — всего собрано: {len(items)}")
+    print(f"ЕГЭ — стереометрия (7.2-7.4): {len(stereometry)}")
+    print(f"ЕГЭ — планиметрия (7.1): {len(planimetry)}")
+
+
+def collect_oge(max_pages: int = 389) -> None:
+    """ОГЭ, «Математика» (~3884 задания, ~389 страниц). Стереометрии тут нет —
+    берём геометрию (=планиметрия) и алгебру как дополнительные hard negatives."""
+    items = collect(OGE_MATH, max_pages=max_pages)
+    geometry = [it for it in items if _matches(it, OGE_GEOMETRY_CODES)]
+    algebra = [it for it in items if _matches(it, OGE_ALGEBRA_CODES)]
+
+    out_dir = Path(__file__).resolve().parent.parent / "data" / "raw"
+    save_jsonl(geometry, out_dir / "fipi_oge_planimetry.jsonl")
+    save_jsonl(algebra, out_dir / "fipi_oge_algebra.jsonl")
+
+    print(f"ОГЭ — всего собрано: {len(items)}")
+    print(f"ОГЭ — геометрия/планиметрия (7.1-7.6): {len(geometry)}")
+    print(f"ОГЭ — алгебра (2.x, 3.x): {len(algebra)}")
+
+
+if __name__ == "__main__":
+    collect_ege()
+    collect_oge()
