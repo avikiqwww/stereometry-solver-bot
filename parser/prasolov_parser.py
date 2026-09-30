@@ -89,6 +89,12 @@ PROBLEM_MARKER_RE = re.compile(
     re.IGNORECASE,
 )
 
+# "Постройте..." — задачи на построение, LLM-решатель не сможет ответить
+# текстом (нужен чертёж). Для фильтра тема та же, но раз с этим типом задач
+# бот в принципе работать не будет, исключаем их и здесь, а не только
+# на этапе датасета для решателя.
+CONSTRUCTION_RE = re.compile(r"\bпостройте\b", re.IGNORECASE)
+
 
 def is_self_contained(text: str) -> bool:
     if not (20 <= len(text) <= 400):
@@ -99,6 +105,8 @@ def is_self_contained(text: str) -> bool:
         return False  # это не задача, а ссылка-«сноска»
     if re.search(r"\d+\s*Глава\s*\d+\.", text):
         return False  # колонтитул страницы просочился — это кусок решения, не условие
+    if CONSTRUCTION_RE.search(text):
+        return False  # задача на построение — решатель не сможет ответить текстом
     if not PROBLEM_MARKER_RE.search(text):
         return False  # не похоже на условие задачи — скорее всего, кусок решения
     return True

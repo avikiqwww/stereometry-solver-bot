@@ -73,6 +73,9 @@ def _looks_garbled(text: str) -> bool:
     return short / len(words) > 0.25
 
 
+DANGLING_SQRT_RE = re.compile(r"√\s*(?=[.,;:)]|$)")
+
+
 def is_self_contained(text: str) -> bool:
     if not (20 <= len(text) <= 400):
         return False
@@ -82,6 +85,8 @@ def is_self_contained(text: str) -> bool:
         return False  # похоже на кусок решения с формулами, а не на условие
     if not PROBLEM_MARKER_RE.search(text):
         return False
+    if DANGLING_SQRT_RE.search(text):
+        return False  # число под корнем не извлеклось из PDF ("равно √ .") — условие неполное
     return True
 
 
