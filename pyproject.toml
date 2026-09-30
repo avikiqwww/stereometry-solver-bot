@@ -1,0 +1,18 @@
+[project]
+name = "stereometry-solver-bot"
+version = "0.1.0"
+description = "Telegram-бот, решающий задачи по стереометрии: фильтр задач и LLM-решатель"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "requests",
+    "beautifulsoup4",
+    "lxml",
+    "certifi",
+    "pandas",
+    "huggingface-hub",
+    "argostranslate",
+    "pymupdf",
+    "torch",
+    "transformers",
+]
