@@ -60,20 +60,32 @@ def main() -> None:
     n_hard = round(TARGET_TOTAL * HARD_NEGATIVE_SHARE)
     n_easy = round(TARGET_TOTAL * EASY_NEGATIVE_SHARE)
 
-    # --- позитив: ФИПИ + Прасолов (основной объём) + немного переведённого SolidGeo ---
+    # --- позитив: ФИПИ + Прасолов ---
+    # SolidGeo (переведённый) исключён из сборки: даже после строгого фильтра
+    # качество не устроило (машинный перевод местами звучит неестественно) —
+    # решение отказаться от него целиком, не подмешивать даже небольшую часть.
     real_stereo = dedup(load_jsonl(RAW / "fipi_ege_stereometry.jsonl"))
     prasolov_stereo = dedup(load_jsonl(RAW / "prasolov_stereometry.jsonl"))
-    translated_stereo = dedup(load_jsonl(RAW / "solidgeo_stereometry_ru.jsonl"))
     for it in real_stereo:
         it["source"] = "fipi_ege"
     for it in prasolov_stereo:
         it["source"] = "prasolov"
-    for it in translated_stereo:
-        it["source"] = "solidgeo_translated"
 
-    positive_pool = real_stereo + prasolov_stereo + translated_stereo
+    positive_pool = real_stereo + prasolov_stereo
     random.shuffle(positive_pool)
     positive = positive_pool[:n_positive]
+
+    # Реальных данных (709) не хватает до целевых 800 — недостачу (~91)
+    # закрываем своими же шаблонами (parser/stereometry_template_generator.py),
+    # а не чужим переводом: текст полностью самодостаточный и наш собственный.
+    shortfall = n_positive - len(positive)
+    if shortfall > 0:
+        from stereometry_template_generator import generate as generate_templates
+
+        generated = generate_templates(n=shortfall)
+        for it in generated:
+            it["source"] = "generated_template"
+        positive += generated
 
     # --- сложный негатив: планиметрия (ЕГЭ+ОГЭ) и алгебра (ОГЭ) пополам ---
     plani_ege = dedup(load_jsonl(RAW / "fipi_ege_planimetry.jsonl"))
