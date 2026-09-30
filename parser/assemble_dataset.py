@@ -60,22 +60,25 @@ def main() -> None:
     n_hard = round(TARGET_TOTAL * HARD_NEGATIVE_SHARE)
     n_easy = round(TARGET_TOTAL * EASY_NEGATIVE_SHARE)
 
-    # --- позитив: ФИПИ + Прасолов ---
+    # --- позитив: ФИПИ + Прасолов + Захаров ---
     # SolidGeo (переведённый) исключён из сборки: даже после строгого фильтра
     # качество не устроило (машинный перевод местами звучит неестественно) —
     # решение отказаться от него целиком, не подмешивать даже небольшую часть.
     real_stereo = dedup(load_jsonl(RAW / "fipi_ege_stereometry.jsonl"))
     prasolov_stereo = dedup(load_jsonl(RAW / "prasolov_stereometry.jsonl"))
+    zaharov_stereo = dedup(load_jsonl(RAW / "zaharov_stereometry.jsonl"))
     for it in real_stereo:
         it["source"] = "fipi_ege"
     for it in prasolov_stereo:
         it["source"] = "prasolov"
+    for it in zaharov_stereo:
+        it["source"] = "zaharov"
 
-    positive_pool = real_stereo + prasolov_stereo
+    positive_pool = real_stereo + prasolov_stereo + zaharov_stereo
     random.shuffle(positive_pool)
     positive = positive_pool[:n_positive]
 
-    # Реальных данных (709) не хватает до целевых 800 — недостачу (~91)
+    # Если реальных данных вдруг не хватит до целевых 800 — недостачу
     # закрываем своими же шаблонами (parser/stereometry_template_generator.py),
     # а не чужим переводом: текст полностью самодостаточный и наш собственный.
     shortfall = n_positive - len(positive)
