@@ -1,22 +1,34 @@
 """
-Перевод датасета SolidGeo (англ.) на русский для позитивного класса фильтра.
+Перевод датасета SolidGeo (англ.) на русский — дополнительный (не основной)
+источник позитивного класса фильтра.
 
 SolidGeo: https://huggingface.co/datasets/SolidGeo/SolidGeo — 3113 реальных
 задач по стереометрии (K-12 и олимпиадный уровень). Лицензия CC-BY-NC-4.0 —
 только некоммерческое использование, для учебного проекта подходит.
 
-Почему не весь датасет целиком:
-- Многие вопросы содержат LaTeX-формулы или ссылки на картинки внутри текста
-  (задача физически не читается без изображения) — вырезаем такие фрагменты,
-  а если после очистки текст стал слишком коротким/пустым — выкидываем целиком.
-- Часть вопросов на китайском (мультиязычный датасет) — тоже отфильтровываем.
+ВАЖНОЕ УТОЧНЕНИЕ (найдено не заранее, а на реальном примере после первого
+прогона — пользователь открыл датасет и увидел задачу без единого числа):
+это датасет для мультимодальных моделей (вопрос+картинка), и подавляющее
+большинство условий физически не имеют смысла без рисунка — все данные
+(числа, подписи вершин) находятся на изображении, а не в тексте. Первая
+версия фильтра здесь чистила только LaTeX/китайский/длину — этого мало:
+после такой чистки ~60% текстов превращались в бессмысленные обрубки вида
+«Найдите длину диагонали. Округлите до двух знаков» без единого числа.
+
+Поэтому фильтр здесь двойной и строгий:
+1. В тексте после очистки должна остаться хотя бы одна цифра — если все
+   числа были только в вырезанной картинке/LaTeX, они пропадают вместе с ней,
+   и это надёжный сигнал «текст неполный».
+2. В оригинале не должно быть слов-маркеров зависимости от рисунка
+   (shown, figure, diagram, below, above).
+
+Из ~3000 вопросов такому фильтру удовлетворяют только ~125 — это ожидаемо
+мало и нормально. Основной объём позитивного класса даёт не этот источник,
+а parser/prasolov_parser.py (реальный русский задачник, без перевода).
+SolidGeo используется только для разнообразия стиля/тематики.
 
 Перевод — локальной offline-моделью (argostranslate), без API и без
-ограничений по частоте запросов. Качество ниже профессионального перевода
-(иногда теряются числа, которые были внутри вырезанной LaTeX-формулы), но
-для датасета фильтра это не критично: нам нужно, чтобы текст выглядел как
-задача по стереометрии (лексика: цилиндр, объём, грань, куб...), а не чтобы
-он был идеально решаем — решать эти тексты классификатору не нужно.
+ограничений по частоте запросов.
 """
 
 from __future__ import annotations
@@ -33,8 +45,8 @@ RAW_DIR = REPO_ROOT / "data" / "raw"
 HF_REPO = "SolidGeo/SolidGeo"
 HF_FILE = "data/train-00000-of-00001.parquet"
 
-SAMPLE_SIZE = 900
 MIN_LEN, MAX_LEN = 20, 280
+FIGURE_MARKERS = re.compile(r"shown|figure|diagram|below|above", re.IGNORECASE)
 
 
 def _clean_text(q: str) -> str | None:
@@ -49,7 +61,8 @@ def _clean_text(q: str) -> str | None:
     return q or None
 
 
-def load_clean_sample(sample_size: int = SAMPLE_SIZE, seed: int = 42) -> pd.DataFrame:
+def load_self_contained_sample() -> pd.DataFrame:
+    """Отбирает только вопросы, самодостаточные без картинки (см. докстринг)."""
     from huggingface_hub import hf_hub_download
 
     path = hf_hub_download(repo_id=HF_REPO, filename=HF_FILE, repo_type="dataset")
@@ -59,9 +72,16 @@ def load_clean_sample(sample_size: int = SAMPLE_SIZE, seed: int = 42) -> pd.Data
     df = df[df["clean"].notna()]
     df = df[df["clean"].str.len().between(MIN_LEN, MAX_LEN)]
     df = df[~df["clean"].str.contains(r"[\$\\\{\}\^]", regex=True)]
-    df = df.drop_duplicates(subset="clean")
 
-    return df.sample(n=min(sample_size, len(df)), random_state=seed)[["clean", "source"]]
+    has_digit = df["clean"].str.contains(r"\d")
+    figure_dependent = df["question"].str.contains(FIGURE_MARKERS, regex=True)
+    # варианты ответа без самого вопроса ("A. 24 B. 30 C. 34 D. 38") —
+    # вопрос был в отдельном отрезанном фрагменте, толку без него нет
+    only_choices = df["clean"].str.match(r"^A\.\s*\S+\s+B\.")
+    df = df[has_digit & ~figure_dependent & ~only_choices]
+
+    df = df.drop_duplicates(subset="clean")
+    return df[["clean", "source"]]
 
 
 def _ensure_en_ru_model() -> None:
@@ -83,7 +103,7 @@ def translate_and_save(sample: pd.DataFrame, out_path: Path = RAW_DIR / "solidge
     import argostranslate.translate as translate
 
     out = []
-    for i, row in sample.iterrows():
+    for _, row in sample.iterrows():
         en = str(row["clean"]).strip()
         if len(en) < 15:
             continue
@@ -99,10 +119,10 @@ def translate_and_save(sample: pd.DataFrame, out_path: Path = RAW_DIR / "solidge
 
 
 if __name__ == "__main__":
-    print("Скачиваю и фильтрую SolidGeo...")
-    sample = load_clean_sample()
-    print(f"Чистых текстов для перевода: {len(sample)}")
+    print("Скачиваю и строго фильтрую SolidGeo (самодостаточные без картинки)...")
+    sample = load_self_contained_sample()
+    print(f"Самодостаточных текстов для перевода: {len(sample)}")
 
-    print("Перевожу (offline-модель argostranslate, может занять пару минут)...")
+    print("Перевожу (offline-модель argostranslate)...")
     n = translate_and_save(sample)
     print(f"Готово: {n} переведённых задач -> data/raw/solidgeo_stereometry_ru.jsonl")

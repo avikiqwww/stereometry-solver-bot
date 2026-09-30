@@ -6,9 +6,14 @@
 
 Источники (все лежат в data/raw/, см. .gitignore — сырьё не публикуется):
 - fipi_ege_stereometry.jsonl   — реальные задачи ЕГЭ (позитив)
+- prasolov_stereometry.jsonl   — В. В. Прасолов, «Задачи по стереометрии»
+  (МЦНМО, 2010) — основной источник объёма позитивного класса, см.
+  parser/prasolov_parser.py. Реальный русский текст, без перевода.
 - solidgeo_stereometry_ru.jsonl — SolidGeo (англ., переведено локально
   offline-моделью argostranslate), лицензия CC-BY-NC-4.0 — только
-  некоммерческое использование, обучающий проект подходит (позитив)
+  некоммерческое использование. Строго отфильтрован (см.
+  parser/solidgeo_translator.py) — небольшая добавка для разнообразия,
+  не основной объём.
 - fipi_ege_planimetry.jsonl, fipi_oge_planimetry.jsonl — планиметрия,
   сложный негатив: тот же стиль, другая тема
 - fipi_oge_algebra.jsonl — алгебра, ещё один сложный негатив
@@ -55,15 +60,18 @@ def main() -> None:
     n_hard = round(TARGET_TOTAL * HARD_NEGATIVE_SHARE)
     n_easy = round(TARGET_TOTAL * EASY_NEGATIVE_SHARE)
 
-    # --- позитив: реальные задачи ЕГЭ + переведённые SolidGeo ---
+    # --- позитив: ФИПИ + Прасолов (основной объём) + немного переведённого SolidGeo ---
     real_stereo = dedup(load_jsonl(RAW / "fipi_ege_stereometry.jsonl"))
+    prasolov_stereo = dedup(load_jsonl(RAW / "prasolov_stereometry.jsonl"))
     translated_stereo = dedup(load_jsonl(RAW / "solidgeo_stereometry_ru.jsonl"))
     for it in real_stereo:
         it["source"] = "fipi_ege"
+    for it in prasolov_stereo:
+        it["source"] = "prasolov"
     for it in translated_stereo:
         it["source"] = "solidgeo_translated"
 
-    positive_pool = real_stereo + translated_stereo
+    positive_pool = real_stereo + prasolov_stereo + translated_stereo
     random.shuffle(positive_pool)
     positive = positive_pool[:n_positive]
 
