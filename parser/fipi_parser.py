@@ -124,6 +124,12 @@ def parse_questions(html: str) -> list[dict]:
         cell = block.select_one("td.cell_0")
         text = cell.get_text(" ", strip=True) if cell else ""
 
+        # У сайта стабильный баг: буква "л" в слове "бо́льший/бо́льшую/бо́льшим"
+        # (с ударением на о) на некоторых страницах превращается в символ
+        # "неизвестный символ" (U+FFFD) — проверено на 12 реальных примерах,
+        # всегда один и тот же паттерн, поэтому чиним точечно, а не выбрасываем.
+        text = re.sub(r"бо\s*�\s*ьш", "больш", text, flags=re.IGNORECASE)
+
         # У задания может быть несколько тегов КЭС сразу — собираем все.
         info_block = soup.select_one(f"#i{number} .task-info-content")
         topics: list[str] = []
@@ -148,6 +154,8 @@ def parse_questions(html: str) -> list[dict]:
             continue
         if not re.search(r"[\d=<>+×÷]", text) and not re.search(r"докажите", text, re.IGNORECASE):
             continue
+        if "�" in text:
+            continue  # осталась порча кодировки, которую не удалось точечно починить
 
         items.append({"number": number, "topics": topics, "text": text})
 
