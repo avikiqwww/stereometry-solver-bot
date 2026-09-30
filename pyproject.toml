@@ -13,4 +13,6 @@ dependencies = [
     "huggingface-hub",
     "argostranslate",
     "pymupdf",
+    "torch",
+    "transformers",
 ]

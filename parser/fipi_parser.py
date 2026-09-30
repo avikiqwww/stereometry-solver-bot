@@ -135,6 +135,20 @@ def parse_questions(html: str) -> list[dict]:
                     topics = [d.get_text(strip=True) for d in value_cell.select("div")] or \
                               [value_cell.get_text(strip=True)]
 
+        # Изредка условие не извлекается целиком (например, если оно было
+        # картинкой), а остаётся только обрывок вроде "Решите неравенство" —
+        # найдено на реальном примере при проверке датасета. У таких обрубков
+        # нет ни цифр, ни знаков, ни "докажите" (для задач-доказательств
+        # обычно и не нужны числа) — по отсутствию всех трёх сразу и ловим.
+        # Отдельно — прямая зависимость от рисунка ("см. рисунок",
+        # "изображённого на рисунке", "на клетчатой бумаге изображены").
+        if len(text) < 15:
+            continue
+        if re.search(r"рисун|клетчатой бумаге", text, re.IGNORECASE):
+            continue
+        if not re.search(r"[\d=<>+×÷]", text) and not re.search(r"докажите", text, re.IGNORECASE):
+            continue
+
         items.append({"number": number, "topics": topics, "text": text})
 
     return items
