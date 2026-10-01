@@ -42,6 +42,44 @@ def load(path: Path) -> list[dict]:
         return [json.loads(line) for line in f if line.strip()]
 
 
+def sample_balanced_by_source(items: list[dict], n: int) -> list[dict]:
+    """Равномерная выборка по источникам, а не случайная из общего пула.
+
+    Случайная выборка из общего пула утягивает пропорции самого пула: если
+    в нём Прасолова в 5 раз больше, чем ФИПИ, то и в выборке будет то же
+    самое соотношение - источник, у которого просто больше сырых задач,
+    начинает доминировать не по смыслу, а по объёму. Делим поровну между
+    источниками вместо этого (с учётом нехватки, если у какого-то источника
+    данных меньше его доли - тогда остаток перераспределяется на остальных)."""
+    by_source: dict[str, list[dict]] = {}
+    for it in items:
+        by_source.setdefault(it["source"], []).append(it)
+
+    sources = sorted(by_source)  # фиксированный порядок для детерминированности
+    remaining = n
+    result: list[dict] = []
+    sources_left = list(sources)
+
+    while remaining > 0 and sources_left:
+        share = remaining // len(sources_left)
+        extra = remaining % len(sources_left)  # первым источникам достаётся +1
+        next_round = []
+        for i, source in enumerate(sources_left):
+            pool = by_source[source]
+            want = share + (1 if i < extra else 0)
+            take = min(want, len(pool))
+            chosen = random.sample(pool, take)
+            result.extend(chosen)
+            remaining -= take
+            left_after = [x for x in pool if x not in chosen]
+            if left_after:
+                by_source[source] = left_after
+                next_round.append(source)
+        sources_left = next_round  # источники, у которых ещё что-то осталось
+
+    return result
+
+
 def main() -> None:
     rows = load(FULL_DATASET)
 
@@ -53,8 +91,12 @@ def main() -> None:
     n_hard = round(TOTAL * HARD_NEGATIVE_SHARE)
     n_easy = TOTAL - n_pos - n_hard  # остаток, чтобы сумма точно была 500
 
+    # Позитив - равномерно по источникам (ФИПИ/Прасолов/Захаров), чтобы
+    # самый крупный по объёму источник не забил собой всю выборку.
+    # Негатив оставляем случайным из пула: источников там и так мало
+    # (планиметрию/алгебру кроме ФИПИ взять неоткуда), делить нечего.
     sample = (
-        random.sample(positive, n_pos)
+        sample_balanced_by_source(positive, n_pos)
         + random.sample(hard_negative, n_hard)
         + random.sample(easy_negative, n_easy)
     )
