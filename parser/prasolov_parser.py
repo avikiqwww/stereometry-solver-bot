@@ -73,6 +73,7 @@ def split_problems(full_text: str) -> list[str]:
         body = full_text[start:end]
         body = re.sub(r"\s+", " ", body).strip()
         body = re.sub(r"\s*Решения\s*$", "", body)  # хвост колонтитула следующей страницы
+        body = re.sub(r"\s*Условия задач\s*\d*\s*$", "", body)  # то же самое, для соседних "Условия задач"-страниц
         problems.append(body)
     return problems
 
