@@ -24,9 +24,13 @@ from __future__ import annotations
 
 import json
 import random
+import re
 from pathlib import Path
 
 random.seed(42)
+
+PROOF_RE = re.compile(r"докаж|обоснуй", re.IGNORECASE)
+N_PRASOLOV_PROOFS = 150  # сколько доказательств Прасолова-планиметрии берём в негативы
 
 RAW = Path(__file__).resolve().parent.parent / "data" / "raw"
 PROCESSED = Path(__file__).resolve().parent.parent / "data" / "processed"
@@ -101,13 +105,35 @@ def main() -> None:
     for it in algebra_oge:
         it["source"] = "fipi_oge"
 
-    planimetry_pool = plani_ege + plani_oge
-    random.shuffle(planimetry_pool)
+    # Прасолов, «Задачи по планиметрии» (parser/prasolov_planimetry_parser.py) -
+    # тот же автор и стиль, что у позитивов, но тема другая.
+    prasolov_plani = dedup(load_jsonl(RAW / "prasolov_planimetry.jsonl"))
+    for it in prasolov_plani:
+        it["source"] = "prasolov_planimetry"
+    prasolov_proofs = [it for it in prasolov_plani if it.get("is_proof")]
+
+    fipi_planimetry = plani_ege + plani_oge
+    random.shuffle(fipi_planimetry)
+    random.shuffle(prasolov_proofs)
     random.shuffle(algebra_oge)
 
-    n_planimetry = n_hard // 2
+    # Сложных негативов n_hard (40% датасета). Планиметрии отдаём больше, чем
+    # алгебре: алгебру ОГЭ со стереометрией спутать нельзя, а планиметрию можно,
+    # и именно по планиметрии модель должна научиться различать по теме.
+    n_planimetry = round(n_hard * 0.6)
     n_algebra = n_hard - n_planimetry
-    hard_negative = planimetry_pool[:n_planimetry] + algebra_oge[:n_algebra]
+
+    # Доказательства в планиметрии: у Прасолова (70% позитивов) почти каждая
+    # задача - "Докажите, что...", а в негативах таких задач было ~3%, поэтому
+    # слово "докажите" стало для модели признаком стереометрии. Берём ВСЕ
+    # доказательства ФИПИ (самые близкие к реальным задачам: в профильном ЕГЭ
+    # планиметрия тоже "а) докажите, б) найдите"), добавляем доказательства
+    # Прасолова-планиметрии, остаток квоты добираем обычными задачами ФИПИ.
+    fipi_proofs = [it for it in fipi_planimetry if PROOF_RE.search(it["text"])]
+    fipi_other = [it for it in fipi_planimetry if not PROOF_RE.search(it["text"])]
+    planimetry_negative = fipi_proofs + prasolov_proofs[:N_PRASOLOV_PROOFS]
+    planimetry_negative += fipi_other[: max(0, n_planimetry - len(planimetry_negative))]
+    hard_negative = planimetry_negative + algebra_oge[:n_algebra]
 
     # --- лёгкий негатив: сгенерированный мусор ---
     junk = load_jsonl(RAW / "junk_easy_negatives.jsonl")
