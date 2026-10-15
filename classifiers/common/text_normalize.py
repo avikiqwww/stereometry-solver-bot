@@ -100,7 +100,7 @@ if __name__ == "__main__":
     import sys
     from pathlib import Path
 
-    csv_path = Path(__file__).resolve().parent.parent / "data" / "processed" / "tfidf_subset_500.csv"
+    csv_path = Path(__file__).resolve().parent.parent.parent / "data" / "processed" / "tfidf_subset_500.csv"
     with open(csv_path, encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
 

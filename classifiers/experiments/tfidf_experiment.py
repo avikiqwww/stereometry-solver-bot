@@ -25,7 +25,7 @@
   и насколько хорошо метку предсказывает только формат записи вершин.
 
 Запуск (из корня репозитория):
-    python classifiers/tfidf_experiment.py
+    python -m classifiers.experiments.tfidf_experiment
 """
 
 from __future__ import annotations
@@ -41,9 +41,9 @@ from sklearn.model_selection import StratifiedGroupKFold, cross_val_predict, cro
 from sklearn.pipeline import Pipeline
 from sklearn.svm import LinearSVC
 
-from text_normalize import normalize_vertices
+from classifiers.common.text_normalize import normalize_vertices
 
-CSV_PATH = Path(__file__).resolve().parent.parent / "data" / "processed" / "tfidf_subset_500.csv"
+CSV_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "processed" / "tfidf_subset_500.csv"
 SEED = 42
 N_SPLITS = 5
 

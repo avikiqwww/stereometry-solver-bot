@@ -122,10 +122,12 @@ uv run python parser/quality_check.py        # отчёт о подозрите�
 **Подвыборка и эксперименты:**
 
 ```bash
-uv run python classifiers/prepare_tfidf_data.py   # подвыборка на 500 строк
-uv run python classifiers/tfidf_experiment.py     # формат записи вершин
-uv run python classifiers/morph_experiment.py     # леммы, слова-указания, проверка на незнакомом источнике
+uv run python -m classifiers.common.prepare_tfidf_data       # подвыборка на 500 строк
+uv run python -m classifiers.experiments.tfidf_experiment    # формат записи вершин
+uv run python -m classifiers.experiments.morph_experiment    # леммы, слова-указания, проверка на незнакомом источнике
 ```
+
+Скрипты из `classifiers/` запускаются из корня репозитория как модули (`python -m ...`).
 
 В Windows перед запуском удобно задать `PYTHONIOENCODING=utf-8`, иначе консоль (cp1251) может упасть на символах вроде `√` и `∠`.
 
@@ -145,11 +147,18 @@ stereometry-solver-bot/
 │   ├── quality_check.py               проверка качества датасета
 │   └── certs/                         сертификат для сайта ФИПИ
 ├── classifiers/                       модели-фильтры и предобработка текста
-│   ├── prepare_tfidf_data.py          подвыборка на 500 строк
-│   ├── text_normalize.py              нормализация обозначений вершин
-│   ├── text_morph.py                  леммы, стемминг, слова-указания
-│   ├── tfidf_experiment.py            эксперимент с форматом вершин
-│   └── morph_experiment.py            эксперимент с морфологией
+│   ├── common/                        общее для всех моделей
+│   │   ├── text_normalize.py          нормализация обозначений вершин
+│   │   ├── text_morph.py              леммы, стемминг, слова-указания
+│   │   └── prepare_tfidf_data.py      подвыборка на 500 строк
+│   ├── experiments/                   эксперименты с предобработкой
+│   │   ├── tfidf_experiment.py        формат записи вершин
+│   │   └── morph_experiment.py        морфология, слова-указания
+│   └── svm/                           фильтр на основе SVM
+│       ├── svm_classifier.py          классификатор
+│       ├── training/                  обучение итоговой модели
+│       ├── experiments/               подбор гиперпараметров
+│       └── models/                    сохранённые модели (не публикуются)
 ├── data/                              данные (не публикуются)
 └── docs/                              документация
 ```

@@ -27,7 +27,7 @@ from functools import lru_cache
 import pymorphy3
 import snowballstemmer
 
-from text_normalize import normalize_vertices
+from classifiers.common.text_normalize import normalize_vertices
 
 _WORD_RE = re.compile(r"(?<!\w)[а-яё]+(?!\w)")
 

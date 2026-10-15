@@ -28,8 +28,8 @@ import pandas as pd
 
 random.seed(42)
 
-FULL_DATASET = Path(__file__).resolve().parent.parent / "data" / "processed" / "filter_dataset.jsonl"
-OUT_PATH = Path(__file__).resolve().parent.parent / "data" / "processed" / "tfidf_subset_500.csv"
+FULL_DATASET = Path(__file__).resolve().parent.parent.parent / "data" / "processed" / "filter_dataset.jsonl"
+OUT_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "processed" / "tfidf_subset_500.csv"
 
 TOTAL = 500
 POSITIVE_SHARE = 0.40

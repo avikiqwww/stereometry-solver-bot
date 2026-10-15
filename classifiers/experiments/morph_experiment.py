@@ -15,7 +15,7 @@
      "хорошим" за счёт того, что модель всё называет стереометрией, 20% негативов
      (по группам) отложены и для них считаем долю ложных срабатываний (FPR).
 
-Запуск:  python classifiers/morph_experiment.py
+Запуск:  python -m classifiers.experiments.morph_experiment
 """
 
 from __future__ import annotations
@@ -32,10 +32,10 @@ from sklearn.model_selection import GroupShuffleSplit, StratifiedGroupKFold, cro
 from sklearn.pipeline import Pipeline
 from sklearn.svm import LinearSVC
 
-from text_morph import preprocess_lemma, preprocess_lemma_no_task_words, preprocess_stem
-from text_normalize import preprocess
+from classifiers.common.text_morph import preprocess_lemma, preprocess_lemma_no_task_words, preprocess_stem
+from classifiers.common.text_normalize import preprocess
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 SEED = 42
 
 VARIANTS = {
